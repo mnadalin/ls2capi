@@ -1,0 +1,63 @@
+Option Public
+Option Declare
+
+%Include "lsconst.lss"
+
+Declare Private Function W32_NSFDbOpen Lib "nnotes" Alias "NSFDbOpen" _
+(ByVal PathName As LMBCS String, hDB As Integer) As Integer
+
+Declare Private Function W32_DesignRefresh Lib "nnotes" Alias "DesignRefresh" _
+(ByVal ServerName As LMBCS String, ByVal hDB As Integer, ByVal dwFlags As Long, _
+ByVal abortCheck As Integer, ByVal messageProc As Integer) As Integer
+
+Declare Private Function W32_OSPathNetConstruct Lib "nnotes" Alias "OSPathNetConstruct" _
+(ByVal PortName As Long, ByVal ServerName As String,_ 
+ByVal FileName As String, ByVal retPathName As String) As Integer
+
+Declare Private Function W32_NSFDbClose Lib "nnotes" Alias "NSFDbClose" _
+(ByVal hDB As Integer) As Integer
+
+Declare Private Function W32_OSLoadString Lib "nnotes.dll" Alias "OSLoadString" _
+(ByVal hModule As Long, ByVal StringCode As Integer, _
+ByVal retBuffer As String, ByVal BufferLength As Integer ) As Integer
+
+Const PROMPT_CHOOSEDATABASE = 13
+Const DB_SERVER = 0
+Const DB_FILEPATH = 1
+Const DB_TITLE = 2
+Const DESIGN_FORCE = 1
+
+Sub Initialize
+	On Error GoTo Trap
+	
+	Dim rc As Integer
+	Dim hDstDB As Integer
+	Dim ws As New NotesUIWorkspace
+	Dim path As String
+	Dim ret As Variant
+	
+	ret = ws.Prompt(PROMPT_CHOOSEDATABASE, "Refresh Design", "")
+	If IsEmpty(ret) Then Exit Sub
+	
+	path = String(1024, " ")
+	Call W32_OSPathNetConstruct(0, ret(DB_SERVER), ret(DB_FILEPATH), path)
+	rc = W32_NSFDbOpen(path, hDstDB)
+	If rc <> 0 Then GoTo APIError
+	
+	rc = W32_DesignRefresh(ret(0), hDstDB, DESIGN_FORCE, 0, 0)
+	If rc <> 0 Then GoTo APIError
+
+Quit:
+	If hDstDB <> 0 Then Call W32_NSFDbClose(hDstDB)
+	Exit Sub
+	
+APIError:
+	Dim szBuffer As String * 1024
+	Call W32_OSLoadString(0, rc, szBuffer, LenB (szBuffer) - 1)
+	MsgBox szBuffer, MB_ICONSTOP, Join(Evaluate("@DbTitle"))
+	GoTo Quit
+	
+Trap:
+	MsgBox Error$ & " (#" & Erl() & ")", MB_ICONSTOP, Join(Evaluate("@DbTitle"))
+	Resume Quit
+End Sub
